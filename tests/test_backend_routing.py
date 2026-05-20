@@ -79,7 +79,6 @@ class TestGetCollectionBackendRouting:
 
             # Intercept palace.get_collection to capture arguments
             received = {}
-            original_get_collection = palace_mod.get_collection
 
             def fake_get_collection(palace_path, collection_name=None, create=True):
                 received["palace_path"] = palace_path

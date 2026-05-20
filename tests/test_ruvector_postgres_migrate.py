@@ -24,7 +24,6 @@ from psycopg2 import sql  # noqa: E402
 
 from mempalace.backends.ruvector_postgres import (  # noqa: E402
     RuvectorPostgresCollection,
-    _to_ruvector_literal,
 )
 
 
