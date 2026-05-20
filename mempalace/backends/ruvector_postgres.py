@@ -96,16 +96,19 @@ class RuvectorPostgresCollection(BaseCollection):
     # -------- DDL ----------------------------------------------------------
 
     def _ensure_table(self, dim: int) -> None:
-        """Create the table on first write. Idempotent.
+        """Create the table + HNSW index on first write. Idempotent.
 
-        HNSW index creation is intentionally NOT done here — see
-        :py:meth:`ensure_hnsw_index`. ruvector v0.3.0's HNSW access method
-        does not cover the table's heap rows for non-similarity queries:
-        the postgres planner happily picks a bitmap-index-scan on the
-        HNSW index to satisfy ``SELECT count(*)`` and silently returns 0
-        rows, even when the heap has data. Forcing the caller to opt in
-        keeps this footgun away from collections that haven't been bulk
-        loaded yet.
+        HNSW makes cosine search sub-linear once the corpus passes a few
+        thousand rows. ruvector v0.3.0 emits ``WARNING: HNSW v2: Bitmap
+        scans not supported for k-NN queries`` and the postgres planner
+        can still pick a bitmap-index-scan on the HNSW for non-similarity
+        aggregates (e.g. ``SELECT count(*)``) — which returns 0 rows
+        because the HNSW only covers similarity scans. ``count()`` below
+        works around this by using ``count(id)``: the HNSW does not cover
+        ``id`` so the planner falls back to a seq scan. Other read paths
+        (``get``, ``delete``, ``query``) are unaffected — they either
+        filter on ``id`` (PK lookup) or use the ``<=>`` operator (the
+        intended HNSW path).
         """
         with self._lock, self._conn.cursor() as cur:
             cur.execute(
@@ -118,16 +121,30 @@ class RuvectorPostgresCollection(BaseCollection):
                 )
                 """
             )
+            # See class docstring for the count(*) workaround. The index name
+            # may be truncated by postgres' 63-char NAMEDATALEN; that's
+            # idempotent since CREATE INDEX IF NOT EXISTS hashes to the same
+            # truncated name on re-runs.
+            idx = f"{self._table}_embedding_hnsw_idx"
+            cur.execute(
+                f"""
+                CREATE INDEX IF NOT EXISTS {idx}
+                ON {self._table}
+                USING hnsw (embedding ruvector_cosine_ops)
+                WITH (m = 16, ef_construction = 64)
+                """
+            )
             self._conn.commit()
         self._dim = dim
 
     def ensure_hnsw_index(self, *, m: int = 16, ef_construction: int = 64) -> None:
-        """Build the HNSW index for cosine search. Caller decides when.
+        """Re-build the HNSW index with custom tuning. Optional.
 
-        Run this *after* a bulk load: ruvector's HNSW supports incremental
-        insert but builds faster when given the full corpus up front, and
-        the index is empty (and selective via the planner) until first
-        populated.
+        ``_ensure_table`` already creates an HNSW index with sensible
+        defaults (m=16, ef_construction=64). Call this explicitly only if
+        you need different parameters (e.g. higher m for recall on a very
+        large corpus). The default-tuned index is DROPped first so the
+        new one takes its name.
         """
         if self._dim is None:
             raise RuntimeError(
@@ -136,6 +153,7 @@ class RuvectorPostgresCollection(BaseCollection):
             )
         idx = f"{self._table}_embedding_hnsw_idx"
         with self._lock, self._conn.cursor() as cur:
+            cur.execute(f"DROP INDEX IF EXISTS {idx}")
             cur.execute(
                 f"""
                 CREATE INDEX IF NOT EXISTS {idx}
@@ -537,7 +555,12 @@ class RuvectorPostgresCollection(BaseCollection):
         if self._dim is None:
             return 0
         with self._lock, self._conn.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) FROM {self._table}")
+            # count(id) instead of count(*): ruvector v0.3.0's HNSW is a
+            # similarity-only index, but the planner can pick it for
+            # bare COUNT(*) via bitmap-index-scan and return 0 rows.
+            # Counting a PK column (not covered by the HNSW) forces the
+            # planner to a seq scan and returns the correct heap count.
+            cur.execute(f"SELECT COUNT(id) FROM {self._table}")
             row = cur.fetchone()
         return int(row[0]) if row else 0
 
