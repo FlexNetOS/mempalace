@@ -267,6 +267,7 @@ class RuvectorPostgresCollection(BaseCollection):
             ef = None
             if re_embed and source_rows:
                 from ..embedding import resolve_embedding_function
+
                 ef = resolve_embedding_function()
 
             insert_rows: list[tuple] = []
@@ -350,9 +351,7 @@ class RuvectorPostgresCollection(BaseCollection):
             if self._dim is None:
                 self._ensure_table(dim)
             elif dim != self._dim:
-                raise ValueError(
-                    f"embedding dim mismatch: collection is {self._dim}, got {dim}"
-                )
+                raise ValueError(f"embedding dim mismatch: collection is {self._dim}, got {dim}")
         elif self._dim is None:
             # No vectors AND no prior table. Refuse to create the table without
             # a real dimension — there's no safe ALTER COLUMN path for
@@ -373,11 +372,15 @@ class RuvectorPostgresCollection(BaseCollection):
             rows.append((ids[i], documents[i], json.dumps(metas[i] or {}), emb_literal))
 
         suffix = (
-            "ON CONFLICT (id) DO UPDATE SET "
-            "document = EXCLUDED.document, "
-            "metadata = EXCLUDED.metadata, "
-            "embedding = EXCLUDED.embedding"
-        ) if on_conflict else ""
+            (
+                "ON CONFLICT (id) DO UPDATE SET "
+                "document = EXCLUDED.document, "
+                "metadata = EXCLUDED.metadata, "
+                "embedding = EXCLUDED.embedding"
+            )
+            if on_conflict
+            else ""
+        )
 
         sql = (
             f"INSERT INTO {self._table} (id, document, metadata, embedding) "
@@ -401,6 +404,7 @@ class RuvectorPostgresCollection(BaseCollection):
             return embeddings
         try:
             from ..embedding import resolve_embedding_function
+
             ef = resolve_embedding_function()
             return ef(documents)
         except Exception as exc:
@@ -460,18 +464,15 @@ class RuvectorPostgresCollection(BaseCollection):
         if not query_embeddings and query_texts:
             try:
                 from ..embedding import resolve_embedding_function
+
                 ef = resolve_embedding_function()
                 query_embeddings = ef(query_texts)
             except Exception as exc:
                 log.warning("embedding-on-query fallback failed: %s", exc)
         if not query_embeddings:
-            return QueryResult(
-                ids=[[]], documents=[[]], metadatas=[[]], distances=[[]]
-            )
+            return QueryResult(ids=[[]], documents=[[]], metadatas=[[]], distances=[[]])
         if self._dim is None:
-            return QueryResult(
-                ids=[[]], documents=[[]], metadatas=[[]], distances=[[]]
-            )
+            return QueryResult(ids=[[]], documents=[[]], metadatas=[[]], distances=[[]])
 
         all_ids: list[list[str]] = []
         all_docs: list[list[str]] = []
@@ -574,9 +575,7 @@ class RuvectorPostgresBackend(BaseBackend):
     def __init__(self, *, database_url: Optional[str] = None) -> None:
         self._database_url = database_url or os.environ.get("DATABASE_URL")
         if not self._database_url:
-            raise RuntimeError(
-                "DATABASE_URL is required for the ruvector_postgres backend"
-            )
+            raise RuntimeError("DATABASE_URL is required for the ruvector_postgres backend")
         self._lock = threading.RLock()
         self._conn: Optional["psycopg2.extensions.connection"] = None
 
@@ -614,9 +613,7 @@ class RuvectorPostgresBackend(BaseBackend):
         if palace_path is None:
             raise TypeError("palace or palace_path is required")
         table = f"mp_{_safe_ident(palace_path)}_{_safe_ident(collection_name)}"
-        return RuvectorPostgresCollection(
-            conn=self._get_conn(), table=table, lock=self._lock
-        )
+        return RuvectorPostgresCollection(conn=self._get_conn(), table=table, lock=self._lock)
 
     def close(self) -> None:
         with self._lock:
