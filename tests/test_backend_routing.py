@@ -188,11 +188,10 @@ class TestRuvectorPostgresBackendInitGuards:
 
         # Build a collection backed by a stub connection. _infer_dim sees
         # UndefinedTable and returns None, simulating a fresh palace.
-        with patch.object(
-            RuvectorPostgresCollection, "_infer_dim", return_value=None
-        ), patch.object(
-            RuvectorPostgresCollection, "_ensure_table"
-        ) as ensure_mock:
+        with (
+            patch.object(RuvectorPostgresCollection, "_infer_dim", return_value=None),
+            patch.object(RuvectorPostgresCollection, "_ensure_table") as ensure_mock,
+        ):
             import threading
 
             col = RuvectorPostgresCollection(

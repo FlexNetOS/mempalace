@@ -48,7 +48,9 @@ def test_collection():
         yield col
     finally:
         with conn.cursor() as cur:
-            cur.execute(sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(sql.Identifier(table_name)))
+            cur.execute(
+                sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(sql.Identifier(table_name))
+            )
             cur.execute(
                 sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(
                     sql.Identifier(f"{table_name}__migrate_512")
@@ -121,7 +123,9 @@ class TestMigrateDim:
             embeddings=[_fake_vec(1, 512), _fake_vec(2, 512), _fake_vec(3, 512)],
         )
         hit = col.query(query_embeddings=[_fake_vec(1, 512)], n_results=1)
-        assert hit.ids[0][0] == "a", "nearest-vector search should still find the row we just inserted"
+        assert (
+            hit.ids[0][0] == "a"
+        ), "nearest-vector search should still find the row we just inserted"
 
     def test_rejects_bad_dim(self, test_collection):
         col = test_collection
