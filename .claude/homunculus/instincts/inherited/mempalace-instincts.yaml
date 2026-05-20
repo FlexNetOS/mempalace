@@ -1,0 +1,388 @@
+# Instincts generated from https://github.com/FlexNetOS/mempalace
+# Generated: 2026-05-20T14:50:12.366Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: mempalace-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/FlexNetOS/mempalace
+---
+
+# Mempalace Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: refactor, feat, fix
+
+## Evidence
+
+- 3 commits analyzed
+- Detected conventional commit pattern
+- Examples: refactor(embedding): hoist resolve_embedding_function into backend-neutral module, feat(backends): RuvectorPostgresBackend + mcp_server routing + migrate_dim + HNSW
+
+---
+id: mempalace-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/FlexNetOS/mempalace
+---
+
+# Mempalace Commit Length
+
+## Action
+
+Write moderate-length commit messages (~76 characters)
+
+## Evidence
+
+- Average commit message length: 76 chars
+- Based on 3 commits
+
+---
+id: mempalace-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/FlexNetOS/mempalace
+---
+
+# Mempalace Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: mempalace-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/FlexNetOS/mempalace
+---
+
+# Mempalace Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: mempalace-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/FlexNetOS/mempalace
+---
+
+# Mempalace Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: mempalace-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/FlexNetOS/mempalace
+---
+
+# Mempalace Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: mempalace-workflow-backend-extension-workflow
+trigger: "when doing backend extension workflow"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/FlexNetOS/mempalace
+---
+
+# Mempalace Workflow Backend Extension Workflow
+
+## Action
+
+Follow the backend-extension-workflow workflow:
+1. Implement or refactor backend-neutral logic in mempalace/embedding.py or similar shared modules.
+2. Update or create backend-specific modules (e.g., mempalace/backends/ruvector_postgres.py, mempalace/backends/chroma.py) to use the new logic or provide shims.
+3. Update server routing or integration points (e.g., mempalace/mcp_server.py) to support the new backend or abstraction.
+4. Write or update tests to cover new backend behavior and routing (e.g., tests/test_backend_routing.py, tests/test_ruvector_postgres_migrate.py).
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: mempalace/embedding.py, mempalace/backends/chroma.py, mempalace/backends/ruvector_postgres.py
+
+---
+id: mempalace-instinct-file-naming
+trigger: "When creating or renaming a file in the codebase"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: FlexNetOS/mempalace
+---
+
+# Mempalace Instinct File Naming
+
+## Action
+
+Use snake_case for file names
+
+## Evidence
+
+- Pattern in namingConventions.files
+- Observed in mempalace/embedding.py, mempalace/backends/chroma.py
+
+---
+id: mempalace-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: FlexNetOS/mempalace
+---
+
+# Mempalace Instinct Function Naming
+
+## Action
+
+Use camelCase for function names
+
+## Evidence
+
+- Pattern in namingConventions.functions
+
+---
+id: mempalace-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: FlexNetOS/mempalace
+---
+
+# Mempalace Instinct Class Naming
+
+## Action
+
+Use PascalCase for class names
+
+## Evidence
+
+- Pattern in namingConventions.classes
+
+---
+id: mempalace-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: FlexNetOS/mempalace
+---
+
+# Mempalace Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for constant names
+
+## Evidence
+
+- Pattern in namingConventions.constants
+
+---
+id: mempalace-instinct-import-style
+trigger: "When importing modules within the package"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: FlexNetOS/mempalace
+---
+
+# Mempalace Instinct Import Style
+
+## Action
+
+Use relative imports
+
+## Evidence
+
+- Pattern in importStyle: relative
+- Seen in mempalace/embedding.py
+
+---
+id: mempalace-instinct-export-style
+trigger: "When exporting functions or classes from a module"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: FlexNetOS/mempalace
+---
+
+# Mempalace Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: mempalace-instinct-test-location
+trigger: "When adding or updating tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: FlexNetOS/mempalace
+---
+
+# Mempalace Instinct Test Location
+
+## Action
+
+Place tests in the separate 'tests' folder
+
+## Evidence
+
+- Pattern in architecture.testLocation: separate
+- Files: tests/test_backend_routing.py, tests/test_ruvector_postgres_migrate.py
+
+---
+id: mempalace-instinct-test-naming
+trigger: "When naming a test file"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: FlexNetOS/mempalace
+---
+
+# Mempalace Instinct Test Naming
+
+## Action
+
+Use the prefix 'test_' followed by the feature or module name
+
+## Evidence
+
+- Files: tests/test_backend_routing.py, tests/test_ruvector_postgres_migrate.py
+
+---
+id: mempalace-instinct-test-coverage-backend
+trigger: "When adding or modifying backend logic"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: FlexNetOS/mempalace
+---
+
+# Mempalace Instinct Test Coverage Backend
+
+## Action
+
+Write or update tests to cover backend behavior and routing
+
+## Evidence
+
+- backend-extension-workflow step: Write or update tests
+- Files: tests/test_backend_routing.py, tests/test_ruvector_postgres_migrate.py
+
+---
+id: mempalace-instinct-commit-format
+trigger: "When writing a commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: FlexNetOS/mempalace
+---
+
+# Mempalace Instinct Commit Format
+
+## Action
+
+Use the Conventional Commits format with prefixes: refactor, feat, or fix, followed by a scope in parentheses and a concise description
+
+## Evidence
+
+- Pattern in commits.type: conventional
+- Prefixes: refactor, feat, fix
+- Examples: refactor(embedding): hoist resolve_embedding_function into backend-neutral module
+
+---
+id: mempalace-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: FlexNetOS/mempalace
+---
+
+# Mempalace Instinct Commit Length
+
+## Action
+
+Keep the commit message concise, around 76 characters on average
+
+## Evidence
+
+- Pattern in commits.averageLength: 76
+
+---
+id: mempalace-instinct-backend-extension-workflow
+trigger: "When adding a new backend or refactoring backend-neutral logic for embeddings/storage"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: FlexNetOS/mempalace
+---
+
+# Mempalace Instinct Backend Extension Workflow
+
+## Action
+
+Follow the backend-extension-workflow: (1) Implement/refactor backend-neutral logic in mempalace/embedding.py or similar, (2) Update/create backend-specific modules, (3) Update server routing/integration points, (4) Write/update tests for backend and routing
+
+## Evidence
+
+- backend-extension-workflow steps and files
+- Example commit sequence and files
+- Observed in commits: refactor(embedding): hoist resolve_embedding_function into backend-neutral module
+
