@@ -6,11 +6,12 @@ Talks SQL to a PostgreSQL instance with the `ruvector` extension preloaded
 and BaseCollection surface so MemPalace can store and recall drawers via
 ruvector's vector type and distance operators.
 
-This backend is intentionally lean. It is not feature-equivalent to the
-ChromaDB reference (no HNSW tuning, no atomic update, no rich `where`
-operator surface). It exists to make `MEMPALACE_BACKEND=ruvector_postgres`
-selectable in the memory-mesh deployment described under
-`_work/memory-mesh/`. Extend as additional capabilities become required.
+This backend is leaner than the ChromaDB reference but ships the
+features memory-mesh actually needs: HNSW auto-index on first table
+creation, ``migrate_dim`` for safe EF-dim rebuilds, and a backend-neutral
+embedding fallback via ``mempalace.embedding.resolve_embedding_function``.
+It does not yet implement the rich ``where`` operator surface or
+chromadb-style segment-health probes. Extend as required.
 
 Tables are namespaced per `(palace, collection)` so multiple MemPalaces can
 share a single Postgres instance without colliding. The table created on
@@ -79,6 +80,14 @@ class RuvectorPostgresCollection(BaseCollection):
         *,
         lock: threading.RLock,
     ) -> None:
+        # Schema-qualified table names are rejected here so migrate_dim's
+        # RENAME does not have to special-case the qualifier — the contract
+        # is "default schema, plain identifier".
+        if "." in table:
+            raise ValueError(
+                f"RuvectorPostgresCollection requires an unqualified table name, "
+                f"got {table!r}; qualify the search_path instead."
+            )
         self._conn = conn
         self._table = table
         self._lock = lock
@@ -87,7 +96,17 @@ class RuvectorPostgresCollection(BaseCollection):
     # -------- DDL ----------------------------------------------------------
 
     def _ensure_table(self, dim: int) -> None:
-        """Create the table + HNSW index on first write. Idempotent."""
+        """Create the table on first write. Idempotent.
+
+        HNSW index creation is intentionally NOT done here — see
+        :py:meth:`ensure_hnsw_index`. ruvector v0.3.0's HNSW access method
+        does not cover the table's heap rows for non-similarity queries:
+        the postgres planner happily picks a bitmap-index-scan on the
+        HNSW index to satisfy ``SELECT count(*)`` and silently returns 0
+        rows, even when the heap has data. Forcing the caller to opt in
+        keeps this footgun away from collections that haven't been bulk
+        loaded yet.
+        """
         with self._lock, self._conn.cursor() as cur:
             cur.execute(
                 f"""
@@ -99,23 +118,33 @@ class RuvectorPostgresCollection(BaseCollection):
                 )
                 """
             )
-            # HNSW index keeps cosine search sub-linear once the corpus passes
-            # a few thousand rows. Building it on the empty table is cheap and
-            # ruvector populates the graph incrementally on subsequent inserts.
-            # ruvector_cosine_ops is the opclass that backs the `<=>` operator
-            # we use in query(). m / ef_construction follow the pgvector
-            # defaults that ruvector mirrors.
-            idx = f"{self._table}_embedding_hnsw_idx"
+            self._conn.commit()
+        self._dim = dim
+
+    def ensure_hnsw_index(self, *, m: int = 16, ef_construction: int = 64) -> None:
+        """Build the HNSW index for cosine search. Caller decides when.
+
+        Run this *after* a bulk load: ruvector's HNSW supports incremental
+        insert but builds faster when given the full corpus up front, and
+        the index is empty (and selective via the planner) until first
+        populated.
+        """
+        if self._dim is None:
+            raise RuntimeError(
+                "ensure_hnsw_index requires the collection to have a known dim; "
+                "call after at least one row has been added."
+            )
+        idx = f"{self._table}_embedding_hnsw_idx"
+        with self._lock, self._conn.cursor() as cur:
             cur.execute(
                 f"""
                 CREATE INDEX IF NOT EXISTS {idx}
                 ON {self._table}
                 USING hnsw (embedding ruvector_cosine_ops)
-                WITH (m = 16, ef_construction = 64)
+                WITH (m = {m}, ef_construction = {ef_construction})
                 """
             )
             self._conn.commit()
-        self._dim = dim
 
     def _infer_dim(self) -> Optional[int]:
         """Look up the embedding column's typmod (== declared dim) if the table exists.
@@ -194,9 +223,15 @@ class RuvectorPostgresCollection(BaseCollection):
         staging = f"{self._table}__migrate_{new_dim}"
         rows_total = 0
         rows_re_embedded = 0
+        rows_failed = 0
 
         with self._lock:
             with self._conn.cursor() as cur:
+                # EXCLUSIVE blocks concurrent writers (cross-process) for the
+                # duration of the rebuild but allows readers — Postgres's lock
+                # mode that is strictly stronger than SHARE ROW EXCLUSIVE so
+                # an UPSERT cannot interleave with the swap.
+                cur.execute(f"LOCK TABLE {self._table} IN EXCLUSIVE MODE")
                 cur.execute(f"DROP TABLE IF EXISTS {staging}")
                 cur.execute(
                     f"""
@@ -210,7 +245,6 @@ class RuvectorPostgresCollection(BaseCollection):
                 )
                 cur.execute(f"SELECT id, document, metadata FROM {self._table}")
                 source_rows = cur.fetchall()
-                self._conn.commit()
 
             ef = None
             if re_embed and source_rows:
@@ -232,9 +266,16 @@ class RuvectorPostgresCollection(BaseCollection):
                         vec_literal = _to_ruvector_literal(list(vec))
                         rows_re_embedded += 1
                     except ValueError:
+                        # Pre-swap wrong-dim is a contract violation — bubble
+                        # up so the caller sees it and the original table is
+                        # left intact (the DROP hasn't run yet).
                         raise
-                    except Exception as exc:  # noqa: BLE001 — log and leave NULL
+                    except Exception as exc:  # noqa: BLE001
+                        # Per-row EF failure leaves embedding NULL on the new
+                        # table; surfaced in rows_failed so callers can tell
+                        # how complete the migration is.
                         log.warning("migrate_dim: re-embed failed for id=%r: %s", rid, exc)
+                        rows_failed += 1
                 meta_json = json.dumps(meta if isinstance(meta, dict) else {})
                 insert_rows.append((rid, doc, meta_json, vec_literal))
 
@@ -247,9 +288,10 @@ class RuvectorPostgresCollection(BaseCollection):
                         insert_rows,
                     )
                 # Atomic swap. ruvector(N) is immutable per column so DROP +
-                # RENAME is the only safe shape.
+                # RENAME is the only safe shape. self._table is required by
+                # __init__ to be unqualified so RENAME does not lose a schema.
                 cur.execute(f"DROP TABLE {self._table}")
-                cur.execute(f"ALTER TABLE {staging} RENAME TO {self._table.split('.')[-1]}")
+                cur.execute(f"ALTER TABLE {staging} RENAME TO {self._table}")
                 self._conn.commit()
 
         self._dim = new_dim
@@ -259,6 +301,7 @@ class RuvectorPostgresCollection(BaseCollection):
             "new_dim": new_dim,
             "rows": rows_total,
             "rows_re_embedded": rows_re_embedded,
+            "rows_failed": rows_failed,
         }
 
     # -------- writes -------------------------------------------------------
