@@ -203,10 +203,20 @@ def _force_chroma_cache_reset() -> None:
     try:
         from .palace import _DEFAULT_BACKEND
 
-        _DEFAULT_BACKEND._clients.pop(_config.palace_path, None)
-        _DEFAULT_BACKEND._freshness.pop(_config.palace_path, None)
+        # ChromaBackend has private per-palace caches (_clients / _freshness).
+        # Other backends (e.g. RuvectorPostgresBackend) don't share that
+        # internal shape — touching the private attrs unconditionally would
+        # AttributeError and be silently swallowed by the bare except below,
+        # leaving the cache *not* reset. Route through the abstract
+        # close_palace contract instead, which all BaseBackend subclasses
+        # implement (default = no-op; postgres backend = close cached conn).
+        if isinstance(_DEFAULT_BACKEND, ChromaBackend):
+            _DEFAULT_BACKEND._clients.pop(_config.palace_path, None)
+            _DEFAULT_BACKEND._freshness.pop(_config.palace_path, None)
+        else:
+            _DEFAULT_BACKEND.close_palace(_config.palace_path)
     except Exception:
-        pass
+        logger.exception("_force_chroma_cache_reset: backend cache reset failed")
 
 
 # ── Vector-search disabled flag (#1222) ──────────────────────────────────
@@ -377,7 +387,29 @@ def _get_collection(create=False):
     forces ``_get_client()`` to rebuild from scratch (which re-runs
     ``quarantine_stale_hnsw`` per #1322), so the second attempt heals the
     common stale-handle / stale-HNSW case automatically.
+
+    When ``palace._DEFAULT_BACKEND`` is not a ``ChromaBackend`` (e.g.
+    ``MEMPALACE_BACKEND=ruvector_postgres`` set the shim), route through
+    the abstract backend instead of the Chroma-specific client/collection
+    path below.  The default (ChromaBackend) path is unchanged.
     """
+    from . import palace as _palace_mod
+
+    if not isinstance(_palace_mod._DEFAULT_BACKEND, ChromaBackend):
+        try:
+            return _palace_mod.get_collection(
+                _config.palace_path,
+                collection_name=_config.collection_name,
+                create=create,
+            )
+        except Exception:
+            logger.exception(
+                "_get_collection (non-chroma backend) failed (palace=%s, create=%s)",
+                _config.palace_path,
+                create,
+            )
+            return None
+
     global _client_cache, _collection_cache, _metadata_cache, _metadata_cache_time
     for attempt in range(2):
         try:
